@@ -51,6 +51,7 @@ private:
 
   unsigned char*                                            _bufferThermal;
   unsigned char*                                            _bufferVisible;
+  unsigned char*                                            _resizedBufferThermal;
   image_transport::CameraPublisher                          _pubThermal;
   image_transport::CameraPublisher                          _pubVisible;
   image_transport::Subscriber                               _subThermal;

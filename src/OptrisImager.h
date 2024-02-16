@@ -16,6 +16,7 @@
 #include "optris_drivers2/msg/flag.hpp"
 #include "optris_drivers2/srv/auto_flag.hpp"
 #include "optris_drivers2/srv/temperature_range.hpp"
+#include "optris_drivers2/srv/focus_motor_pos.hpp"
 
 namespace optris_drivers2
 {
@@ -106,7 +107,13 @@ public:
   void onSetTemperatureRange(const std::shared_ptr<rmw_request_id_t> request_header,
                              const std::shared_ptr<optris_drivers2::srv::TemperatureRange::Request> req,
                              const std::shared_ptr<optris_drivers2::srv::TemperatureRange::Response> res);
-
+  
+  /**
+   * ROS service callback changing the temperature range
+   */
+  void onFocus(const std::shared_ptr<rmw_request_id_t> request_header,
+                             const std::shared_ptr<optris_drivers2::srv::FocusMotorPos::Request> req,
+                             const std::shared_ptr<optris_drivers2::srv::FocusMotorPos::Response> res);
 private:
 
   bool _run;
@@ -144,6 +151,8 @@ private:
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr _sForce;
 
   rclcpp::Service<optris_drivers2::srv::TemperatureRange>::SharedPtr _sTemp;
+
+  rclcpp::Service<optris_drivers2::srv::FocusMotorPos>::SharedPtr _sFocus;
 };
 
 } //namespace

@@ -44,6 +44,7 @@ set(srv_files
   "srv/AutoFlag.srv"
   "srv/TemperatureRange.srv"
   "srv/Palette.srv"
+  "srv/FocusMotorPos.srv"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

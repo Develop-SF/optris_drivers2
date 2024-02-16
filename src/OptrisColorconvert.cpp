@@ -4,6 +4,10 @@
 #include <opencv2/imgproc.hpp> // For putText
 #include <opencv2/highgui.hpp> // For imshow, waitKey
 
+
+#define scaled_image_width 300
+#define scaled_image_height 300
+
 namespace optris_drivers2
 {
 
@@ -24,6 +28,7 @@ namespace optris_drivers2
   {
     _this          = this;
     _bufferThermal = nullptr;
+    _resizedBufferThermal = nullptr;
     _bufferVisible = nullptr;
     _frame         = 0;
     int palette    = 6;
@@ -87,6 +92,7 @@ namespace optris_drivers2
   OptrisColorconvert::~OptrisColorconvert()
   {
     if(_bufferThermal)	delete [] _bufferThermal;
+    if(_resizedBufferThermal)  delete [] _resizedBufferThermal;
     if(_bufferVisible)  delete [] _bufferVisible;
   }
 
@@ -120,10 +126,14 @@ namespace optris_drivers2
     // 首先，將_bufferThermal轉換成OpenCV的Mat格式以便操作
     cv::Mat thermalImage = cv::Mat(image->height, image->width, CV_8UC3, _bufferThermal);
 
+    cv::Mat resizedImage; 
+
+    cv::resize(thermalImage, resizedImage, cv::Size(scaled_image_width, scaled_image_height));
+
     // 設置文字參數
     //int fontFace = cv::FONT_HERSHEY_PLAIN;
     int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-    double fontScale = 0.25;
+    double fontScale = 1;
     int thickness = 1;
     cv::Scalar textColor(255, 255, 255); // 白色文字
     int baseline = 0;
@@ -142,27 +152,30 @@ namespace optris_drivers2
 
     // 计算文字位置使其居中
     int totalTextHeight = textSizeMax.height + textSizeMin.height + 5; // 假设5像素的间距
-    cv::Point maxTempPos((thermalImage.cols - textSizeMax.width) / 2, (thermalImage.rows - totalTextHeight) / 2 + textSizeMax.height);
-    cv::Point minTempPos((thermalImage.cols - textSizeMin.width) / 2, maxTempPos.y + textSizeMin.height + 5);
+    cv::Point maxTempPos((resizedImage.cols - textSizeMax.width) / 2, (resizedImage.rows - totalTextHeight) / 2 + textSizeMax.height);
+    cv::Point minTempPos((resizedImage.cols - textSizeMin.width) / 2, maxTempPos.y + textSizeMin.height + 5);
 
     // 在圖像上繪製文字
-    cv::putText(thermalImage, maxTempText, maxTempPos, fontFace, fontScale, textColor, thickness);
-    cv::putText(thermalImage, minTempText, minTempPos, fontFace, fontScale, textColor, thickness);
+    cv::putText(resizedImage, maxTempText, maxTempPos, fontFace, fontScale, textColor, thickness);
+    cv::putText(resizedImage, minTempText, minTempPos, fontFace, fontScale, textColor, thickness);
 
     // 將修改後的圖像 data 回寫到_bufferThermal
-    memcpy(_bufferThermal, thermalImage.data, image->height * image->width*3*sizeof(unsigned char));
+    if(_resizedBufferThermal==NULL)
+      _resizedBufferThermal = new unsigned char[scaled_image_width * scaled_image_height * 3];
+
+    memcpy(_resizedBufferThermal, resizedImage.data, scaled_image_width * scaled_image_height*3*sizeof(unsigned char));
 
     sensor_msgs::msg::Image img;
     img.header.frame_id = "thermal_image_view";
-    img.height 	        = image->height;
-    img.width 	        = image->width;
+    img.height 	        = scaled_image_height;
+    img.width 	        = scaled_image_width;
     img.encoding        = "rgb8";
-    img.step            = image->width*3;
+    img.step            = scaled_image_width*3;
     img.header.stamp    = this->now();
 
     // copy the image buffer
     img.data.resize(img.height*img.step);
-    memcpy(&img.data[0], &_bufferThermal[0], img.height * img.step * sizeof(*_bufferThermal));
+    memcpy(&img.data[0], &_resizedBufferThermal[0], img.height * img.step * sizeof(*_resizedBufferThermal));
     
     sensor_msgs::msg::CameraInfo camera_info = _camera_info_manager.getCameraInfo();
     camera_info.header = img.header;

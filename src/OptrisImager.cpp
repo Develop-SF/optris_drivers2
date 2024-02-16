@@ -73,6 +73,9 @@ OptrisImager::OptrisImager(evo::IRDevice* dev, evo::IRDeviceParams params) : Nod
   // provide service to change temperature range
   _sTemp  = this->create_service<optris_drivers2::srv::TemperatureRange> ("temperature_range", std::bind(&OptrisImager::onSetTemperatureRange, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+  // provide service to change focus
+  _sFocus  = this->create_service<optris_drivers2::srv::FocusMotorPos> ("focus_motor_pos", std::bind(&OptrisImager::onFocus, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+
   _img_cnt = 0;
 
   _dev = dev;
@@ -205,6 +208,21 @@ void OptrisImager::onSetTemperatureRange(const std::shared_ptr<rmw_request_id_t>
   }
 
   res->success = validParam;
+}
+
+
+void OptrisImager::onFocus(const std::shared_ptr<rmw_request_id_t> request_header,
+                             const std::shared_ptr<optris_drivers2::srv::FocusMotorPos::Request> req,
+                             const std::shared_ptr<optris_drivers2::srv::FocusMotorPos::Response> res)
+{
+    (void) request_header;
+    RCLCPP_INFO(get_logger(), "Calling service on_Focus %f",req->pos);
+
+    bool error = _imager.setFocusmotorPos(req->pos);
+    //if error is false, it means that the focus motor is not available
+    res->success = error;
+
+
 }
 
 }
