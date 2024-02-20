@@ -125,13 +125,54 @@ namespace optris_drivers2
 
     // 首先，將_bufferThermal轉換成OpenCV的Mat格式以便操作
     cv::Mat thermalImage = cv::Mat(image->height, image->width, CV_8UC3, _bufferThermal);
-
     cv::Mat resizedImage; 
 
     cv::resize(thermalImage, resizedImage, cv::Size(scaled_image_width, scaled_image_height));
 
+    // 准备进行k-means聚类的数据
+    cv::Mat data_kmeans;
+    thermalImage.convertTo(data_kmeans, CV_32F);
+    data_kmeans = data_kmeans.reshape(1, data_kmeans.total());
+
+    // 执行k-means聚类
+    int K = 2; // 假设我们想要将图像分成两个聚类
+    cv::Mat labels, centers;
+    cv::kmeans(data_kmeans, K, labels, 
+               cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::MAX_ITER, 10, 1.0),
+               3, cv::KMEANS_PP_CENTERS, centers);
+
+    // 计算每个聚类的重心
+    std::vector<cv::Point2f> centroids(K);
+    std::vector<int> counts(K, 0);
+    for (int i = 0; i < labels.rows; i++) {
+        int clusterIdx = labels.at<int>(i);
+        int index = i % thermalImage.cols + (i / thermalImage.cols) * thermalImage.cols;
+        centroids[clusterIdx] += cv::Point2f(index % thermalImage.cols, index / thermalImage.cols);
+        counts[clusterIdx]++;
+    }
+    float scaleX = scaled_image_width / static_cast<float>(thermalImage.cols);
+    float scaleY = scaled_image_height / static_cast<float>(thermalImage.rows);
+
+    for (int i = 0; i < K; i++) {
+        centroids[i].x /= counts[i];
+        centroids[i].y /= counts[i];
+
+        // 调整重心位置到提升解析度后的图像坐标
+        cv::Point2f resizedCentroid(centroids[i].x * scaleX, centroids[i].y * scaleY);
+
+        // 获取重心位置的温度
+        float temperature = _iBuilder.getTemperatureAt(static_cast<int>(centroids[i].x), static_cast<int>(centroids[i].y));
+        std::string tempText = "Temp: " + std::to_string(temperature) + " C";
+
+        // 在提升解析度后的图像上标注重心和温度
+        cv::circle(resizedImage, resizedCentroid, 5, cv::Scalar(0, 255, 0), -1); // 使用绿色标注重心
+        cv::putText(resizedImage, tempText, cv::Point(resizedCentroid.x, resizedCentroid.y - 10),
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+    }
+
     // 設置文字參數
     //int fontFace = cv::FONT_HERSHEY_PLAIN;
+    /*
     int fontFace = cv::FONT_HERSHEY_SIMPLEX;
     double fontScale = 1;
     int thickness = 1;
@@ -158,6 +199,8 @@ namespace optris_drivers2
     // 在圖像上繪製文字
     cv::putText(resizedImage, maxTempText, maxTempPos, fontFace, fontScale, textColor, thickness);
     cv::putText(resizedImage, minTempText, minTempPos, fontFace, fontScale, textColor, thickness);
+    */
+    
 
     // 將修改後的圖像 data 回寫到_bufferThermal
     if(_resizedBufferThermal==NULL)
