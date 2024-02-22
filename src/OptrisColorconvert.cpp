@@ -163,12 +163,17 @@ namespace optris_drivers2
     for (int k = 0; k < K; k++) {
         int minX = thermalImage.cols, minY = thermalImage.rows;
         int maxX = 0, maxY = 0;
+        double temperatureSum = 0;
+        int tempCount = 0;
 
         for (int i = 0; i < labels.rows; i++) {
             int clusterIdx = labels.at<int>(i);
             if (clusterIdx == k) {
                 int x = i % thermalImage.cols;
                 int y = i / thermalImage.cols;
+                float temperature = _iBuilder.getTemperatureAt(x, y);
+                temperatureSum += temperature;
+                tempCount++;
                 if (x < minX) minX = x;
                 if (x > maxX) maxX = x;
                 if (y < minY) minY = y;
@@ -179,14 +184,20 @@ namespace optris_drivers2
         // 計算矩形中心座標
         int centerX = (minX + maxX) / 2;
         int centerY = (minY + maxY) / 2;
-        temperatures[k] = _iBuilder.getTemperatureAt(centerX, centerY); // get temperature at the center
-        // get temperature at the center
+        //temperatures[k] = _iBuilder.getTemperatureAt(centerX, centerY); // get temperature at the center
+        temperatures[k] = temperatureSum / tempCount; // get average temperature
 
         // 轉換中心座標到縮放後的影像尺寸
         scaledCenters[k] = cv::Point2f(centerX * scaleX, centerY * scaleY);
     }
 
-    // 假設您有一個函數getTemperatureAtCoordinate
+    int maxTempIdx = 0;
+    
+    for(int k = 0; k < K; k++){
+      if(temperatures[k] > temperatures[maxTempIdx]){
+        maxTempIdx = k;
+      }
+    }
     
     
 
@@ -198,18 +209,23 @@ namespace optris_drivers2
           
           
           // 繪製每個輪廓到縮放後的影像上
-          for (const auto& contour : contours) {
+          if (k == maxTempIdx){
+            for (const auto& contour : contours) {
               std::vector<cv::Point> resizedContour;
               for (size_t i = 0; i < contour.size(); i++) {
                   resizedContour.push_back(cv::Point(static_cast<int>(contour[i].x * scaleX), static_cast<int>(contour[i].y * scaleY)));
               }
-              cv::polylines(resizedImage, std::vector<std::vector<cv::Point>>{resizedContour}, true, cv::Scalar(0, 255, 0), 2);
+              cv::polylines(resizedImage, std::vector<std::vector<cv::Point>>{resizedContour}, true, cv::Scalar(0, 255, 0), 1);
+            }
+          
+          
+            cv::circle(resizedImage, scaledCenters[k], 5, cv::Scalar(255, 0, 0), -1); // 使用紅色標示重心
+            std::string tempText = "Temp: " + std::to_string(temperatures[k]) + " C";
+            cv::putText(resizedImage, tempText, cv::Point(scaledCenters[k].x, scaledCenters[k].y - 10),
+                      cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
           }
-          // 在縮放後的影像上標示總重心
-          cv::circle(resizedImage, scaledCenters[k], 5, cv::Scalar(255, 0, 0), -1); // 使用紅色標示重心
-          std::string tempText = "Temp: " + std::to_string(temperatures[k]) + " C";
-          cv::putText(resizedImage, tempText, cv::Point(scaledCenters[k].x, scaledCenters[k].y - 10),
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+          
+          
     }
     // 將修改後的圖像 data 回寫到_bufferThermal
     if(_resizedBufferThermal==NULL)
