@@ -125,40 +125,108 @@ namespace optris_drivers2
 
     // 首先，將_bufferThermal轉換成OpenCV的Mat格式以便操作
     cv::Mat thermalImage = cv::Mat(image->height, image->width, CV_8UC3, _bufferThermal);
-
     cv::Mat resizedImage; 
 
     cv::resize(thermalImage, resizedImage, cv::Size(scaled_image_width, scaled_image_height));
 
-    // 設置文字參數
-    //int fontFace = cv::FONT_HERSHEY_PLAIN;
-    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-    double fontScale = 1;
-    int thickness = 1;
-    cv::Scalar textColor(255, 255, 255); // 白色文字
-    int baseline = 0;
+    float scaleX = scaled_image_width / static_cast<float>(thermalImage.cols);
+    float scaleY = scaled_image_height / static_cast<float>(thermalImage.rows);
 
-    // 準備要顯示的文字
-    std::string maxTempText = "Max: " + std::to_string(maxRegion.t) + " C";
-    std::string minTempText = "Min: " + std::to_string(minRegion.t) + " C";
+    // 准备进行k-means聚类的数据
+    cv::Mat data_kmeans;
+    thermalImage.convertTo(data_kmeans, CV_32F);
+    data_kmeans = data_kmeans.reshape(1, data_kmeans.total());
 
-    // 獲取文字框大小
-    cv::Size textSizeMax = cv::getTextSize(maxTempText, fontFace, fontScale, thickness, &baseline);
-    cv::Size textSizeMin = cv::getTextSize(minTempText, fontFace, fontScale, thickness, &baseline);
+    // 执行k-means聚类
+    int K = 2; // 假设我们想要将图像分成两个聚类
+    cv::Mat labels, centers;
+    cv::kmeans(data_kmeans, K, labels, 
+               cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::MAX_ITER, 10, 1.0),
+               3, cv::KMEANS_PP_CENTERS, centers);
 
-    // 選擇文字位置
-    //cv::Point maxTempPos(10, textSizeMax.height + 10); // 略高於圖像底部
-    //cv::Point minTempPos(10, textSizeMax.height + textSizeMin.height + 20); // 在最高溫度資訊下方
+    std::vector<cv::Mat> masks(K);
+    for (int k = 0; k < K; k++) {
+        masks[k] = cv::Mat::zeros(thermalImage.size(), CV_8UC1); // 使用原始影像大小創建遮罩
+    }
 
-    // 计算文字位置使其居中
-    int totalTextHeight = textSizeMax.height + textSizeMin.height + 5; // 假设5像素的间距
-    cv::Point maxTempPos((resizedImage.cols - textSizeMax.width) / 2, (resizedImage.rows - totalTextHeight) / 2 + textSizeMax.height);
-    cv::Point minTempPos((resizedImage.cols - textSizeMin.width) / 2, maxTempPos.y + textSizeMin.height + 5);
+    for (int i = 0; i < labels.rows; i++) {
+        int clusterIdx = labels.at<int>(i);
+        int x = i % thermalImage.cols;
+        int y = i / thermalImage.cols;
+        masks[clusterIdx].at<uchar>(y, x) = 255; // 在對應的遮罩上標記聚類點
+    }
 
-    // 在圖像上繪製文字
-    cv::putText(resizedImage, maxTempText, maxTempPos, fontFace, fontScale, textColor, thickness);
-    cv::putText(resizedImage, minTempText, minTempPos, fontFace, fontScale, textColor, thickness);
+     // I want to declare a center for each cluster
+     std::vector<cv::Point2f> scaledCenters(K);
+     std::vector<float> temperatures(K);
 
+    for (int k = 0; k < K; k++) {
+        int minX = thermalImage.cols, minY = thermalImage.rows;
+        int maxX = 0, maxY = 0;
+        double temperatureSum = 0;
+        int tempCount = 0;
+
+        for (int i = 0; i < labels.rows; i++) {
+            int clusterIdx = labels.at<int>(i);
+            if (clusterIdx == k) {
+                int x = i % thermalImage.cols;
+                int y = i / thermalImage.cols;
+                float temperature = _iBuilder.getTemperatureAt(x, y);
+                temperatureSum += temperature;
+                tempCount++;
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+
+        // 計算矩形中心座標
+        int centerX = (minX + maxX) / 2;
+        int centerY = (minY + maxY) / 2;
+        //temperatures[k] = _iBuilder.getTemperatureAt(centerX, centerY); // get temperature at the center
+        temperatures[k] = temperatureSum / tempCount; // get average temperature
+
+        // 轉換中心座標到縮放後的影像尺寸
+        scaledCenters[k] = cv::Point2f(centerX * scaleX, centerY * scaleY);
+    }
+
+    int maxTempIdx = 0;
+    
+    for(int k = 0; k < K; k++){
+      if(temperatures[k] > temperatures[maxTempIdx]){
+        maxTempIdx = k;
+      }
+    }
+    
+    
+
+    for (int k = 0; k < K; k++) {
+          cv::Moments combinedMoments; // 用於存儲所有輪廓矩的組合
+          std::vector<std::vector<cv::Point>> contours;
+          cv::findContours(masks[k], contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+
+          
+          
+          // 繪製每個輪廓到縮放後的影像上
+          if (k == maxTempIdx){
+            for (const auto& contour : contours) {
+              std::vector<cv::Point> resizedContour;
+              for (size_t i = 0; i < contour.size(); i++) {
+                  resizedContour.push_back(cv::Point(static_cast<int>(contour[i].x * scaleX), static_cast<int>(contour[i].y * scaleY)));
+              }
+              cv::polylines(resizedImage, std::vector<std::vector<cv::Point>>{resizedContour}, true, cv::Scalar(0, 255, 0), 1);
+            }
+          
+          
+            cv::circle(resizedImage, scaledCenters[k], 5, cv::Scalar(255, 0, 0), -1); // 使用紅色標示重心
+            std::string tempText = "Temp: " + std::to_string(temperatures[k]) + " C";
+            cv::putText(resizedImage, tempText, cv::Point(scaledCenters[k].x, scaledCenters[k].y - 10),
+                      cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+          }
+          
+          
+    }
     // 將修改後的圖像 data 回寫到_bufferThermal
     if(_resizedBufferThermal==NULL)
       _resizedBufferThermal = new unsigned char[scaled_image_width * scaled_image_height * 3];
