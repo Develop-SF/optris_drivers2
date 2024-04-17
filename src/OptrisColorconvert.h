@@ -10,6 +10,7 @@
 #include <camera_info_manager/camera_info_manager.h>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <std_msgs/msg/float32.hpp>
+#include <optris_drivers2/msg/temperature.hpp>
 
 
 #include "libirimager/ImageBuilder.h"
@@ -58,7 +59,7 @@ private:
   image_transport::CameraPublisher                          _pubVisible;
   image_transport::Subscriber                               _subThermal;
   image_transport::Subscriber                               _subVisible;
-  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr      _pubTemp;
+  rclcpp::Publisher<optris_drivers2::msg::Temperature>::SharedPtr _pubTemp;
   unsigned int                                              _frame;
   evo::ImageBuilder                                         _iBuilder;
   camera_info_manager::CameraInfoManager                    _camera_info_manager;

@@ -58,7 +58,7 @@ namespace optris_drivers2
     _pubThermal = image_transport::create_camera_publisher(this, "thermal_image_view", profile);
     _pubVisible = image_transport::create_camera_publisher(this, "visible_image_view", profile);
     
-    _pubTemp = this->create_publisher<std_msgs::msg::Float32>("food_temperature", 10);
+    _pubTemp = this->create_publisher<optris_drivers2::msg::Temperature>("food_temperature", 10);
     _sPalette = this->create_service<optris_drivers2::srv::Palette>("palette", std::bind(&OptrisColorconvert::onPalette, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
     std::string camera_name;
@@ -248,8 +248,11 @@ namespace optris_drivers2
     camera_info.header = img.header;
     _pubThermal.publish(img, camera_info);
     
-    std_msgs::msg::Float32 foodTemperature;
-    foodTemperature.data = temperatures[midTempIndex];
+    optris_drivers2::msg::Temperature foodTemperature;
+    foodTemperature.header.stamp = this->now();
+    foodTemperature.temperature_flag = temperatures[midTempIndex];
+    foodTemperature.temperature_box = temperatures[midTempIndex];
+    foodTemperature.temperature_chip = temperatures[midTempIndex];
     _pubTemp->publish(foodTemperature);
   }
 
