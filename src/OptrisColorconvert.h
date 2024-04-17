@@ -9,6 +9,8 @@
 #include <sensor_msgs/msg/time_reference.hpp>
 #include <camera_info_manager/camera_info_manager.h>
 #include <sensor_msgs/msg/camera_info.hpp>
+#include <std_msgs/msg/float32.hpp>
+
 
 #include "libirimager/ImageBuilder.h"
 #include <optris_drivers2/srv/palette.hpp>
@@ -56,12 +58,12 @@ private:
   image_transport::CameraPublisher                          _pubVisible;
   image_transport::Subscriber                               _subThermal;
   image_transport::Subscriber                               _subVisible;
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr      _pubTemp;
   unsigned int                                              _frame;
-
   evo::ImageBuilder                                         _iBuilder;
   camera_info_manager::CameraInfoManager                    _camera_info_manager;
   rclcpp::Service<optris_drivers2::srv::Palette>::SharedPtr _sPalette;
-  
+  int findMedianIndex(const std::vector<float>& vec);
 };
 
 } //namespace

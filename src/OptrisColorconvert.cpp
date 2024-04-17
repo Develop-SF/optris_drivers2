@@ -57,7 +57,8 @@ namespace optris_drivers2
 
     _pubThermal = image_transport::create_camera_publisher(this, "thermal_image_view", profile);
     _pubVisible = image_transport::create_camera_publisher(this, "visible_image_view", profile);
-
+    
+    _pubTemp = this->create_publisher<std_msgs::msg::Float32>("food_temperature", 10);
     _sPalette = this->create_service<optris_drivers2::srv::Palette>("palette", std::bind(&OptrisColorconvert::onPalette, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
     std::string camera_name;
@@ -132,13 +133,14 @@ namespace optris_drivers2
     float scaleX = scaled_image_width / static_cast<float>(thermalImage.cols);
     float scaleY = scaled_image_height / static_cast<float>(thermalImage.rows);
 
+    
     // 准备进行k-means聚类的数据
     cv::Mat data_kmeans;
     thermalImage.convertTo(data_kmeans, CV_32F);
     data_kmeans = data_kmeans.reshape(1, data_kmeans.total());
 
     // 执行k-means聚类
-    int K = 2; // 假设我们想要将图像分成两个聚类
+    int K = 3; // 假设我们想要将图像分成3个聚类
     cv::Mat labels, centers;
     cv::kmeans(data_kmeans, K, labels, 
                cv::TermCriteria(cv::TermCriteria::EPS+cv::TermCriteria::MAX_ITER, 10, 1.0),
@@ -149,13 +151,14 @@ namespace optris_drivers2
         masks[k] = cv::Mat::zeros(thermalImage.size(), CV_8UC1); // 使用原始影像大小創建遮罩
     }
 
+    
     for (int i = 0; i < labels.rows; i++) {
         int clusterIdx = labels.at<int>(i);
         int x = i % thermalImage.cols;
         int y = i / thermalImage.cols;
         masks[clusterIdx].at<uchar>(y, x) = 255; // 在對應的遮罩上標記聚類點
     }
-
+    
      // I want to declare a center for each cluster
      std::vector<cv::Point2f> scaledCenters(K);
      std::vector<float> temperatures(K);
@@ -165,13 +168,13 @@ namespace optris_drivers2
         int maxX = 0, maxY = 0;
         double temperatureSum = 0;
         int tempCount = 0;
-
+        float temperature = 0;
         for (int i = 0; i < labels.rows; i++) {
             int clusterIdx = labels.at<int>(i);
             if (clusterIdx == k) {
                 int x = i % thermalImage.cols;
                 int y = i / thermalImage.cols;
-                float temperature = _iBuilder.getTemperatureAt(x, y);
+                temperature = _iBuilder.getTemperatureAt(x, y);
                 temperatureSum += temperature;
                 tempCount++;
                 if (x < minX) minX = x;
@@ -191,42 +194,38 @@ namespace optris_drivers2
         scaledCenters[k] = cv::Point2f(centerX * scaleX, centerY * scaleY);
     }
 
-    int maxTempIdx = 0;
+    int midTempIndex = findMedianIndex(temperatures);
+    int maxTempIndex = 0;
     
     for(int k = 0; k < K; k++){
-      if(temperatures[k] > temperatures[maxTempIdx]){
-        maxTempIdx = k;
+      if(temperatures[k] > temperatures[maxTempIndex]){
+        maxTempIndex = k;
       }
     }
-    
-    
 
+    
     for (int k = 0; k < K; k++) {
           cv::Moments combinedMoments; // 用於存儲所有輪廓矩的組合
           std::vector<std::vector<cv::Point>> contours;
           cv::findContours(masks[k], contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-          
-          
           // 繪製每個輪廓到縮放後的影像上
-          if (k == maxTempIdx){
+          if (k == midTempIndex){
+            //if (1){
             for (const auto& contour : contours) {
               std::vector<cv::Point> resizedContour;
               for (size_t i = 0; i < contour.size(); i++) {
                   resizedContour.push_back(cv::Point(static_cast<int>(contour[i].x * scaleX), static_cast<int>(contour[i].y * scaleY)));
               }
-              cv::polylines(resizedImage, std::vector<std::vector<cv::Point>>{resizedContour}, true, cv::Scalar(0, 255, 0), 1);
+              cv::polylines(resizedImage, std::vector<std::vector<cv::Point>>{resizedContour}, true, cv::Scalar(0, 255, 0), 2);
             }
-          
-          
             cv::circle(resizedImage, scaledCenters[k], 5, cv::Scalar(255, 0, 0), -1); // 使用紅色標示重心
             std::string tempText = "Temp: " + std::to_string(temperatures[k]) + " C";
             cv::putText(resizedImage, tempText, cv::Point(scaledCenters[k].x, scaledCenters[k].y - 10),
-                      cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+                      cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
           }
-          
-          
     }
+    
     // 將修改後的圖像 data 回寫到_bufferThermal
     if(_resizedBufferThermal==NULL)
       _resizedBufferThermal = new unsigned char[scaled_image_width * scaled_image_height * 3];
@@ -249,6 +248,9 @@ namespace optris_drivers2
     camera_info.header = img.header;
     _pubThermal.publish(img, camera_info);
     
+    std_msgs::msg::Float32 foodTemperature;
+    foodTemperature.data = temperatures[midTempIndex];
+    _pubTemp->publish(foodTemperature);
   }
 
   void OptrisColorconvert::onVisibleDataReceive(const sensor_msgs::msg::Image::ConstSharedPtr & image)
@@ -308,5 +310,28 @@ namespace optris_drivers2
       res->success = true;
     }
   }
+int OptrisColorconvert::findMedianIndex(const std::vector<float>& vec) {
+    int n = vec.size();
+    std::vector<std::pair<float, int>> indexedVec(n);
 
+    // Create a vector of pairs (value, original index)
+    for (int i = 0; i < n; ++i) {
+        indexedVec[i] = std::make_pair(vec[i], i);
+    }
+
+    // Sort the vector of pairs based on the values
+    std::sort(indexedVec.begin(), indexedVec.end(), 
+              [](const std::pair<int, int>& a, const std::pair<int, int>& b) {
+                  return a.first < b.first;
+              });
+
+    // Calculate the median index
+    int medianIndex = n / 2;
+    if (n % 2 == 0) {
+        medianIndex--; // Adjust for 0-based index, take the lower middle if even
+    }
+
+    // Return the original index of the median element
+    return indexedVec[medianIndex].second;
+}
 } //namespace
