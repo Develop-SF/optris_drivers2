@@ -12,6 +12,7 @@ OptrisImager::OptrisImager(evo::IRDevice* dev, evo::IRDeviceParams params) : Nod
   RCLCPP_INFO(get_logger(), "Serial: %d", params.serial);
 
   _imager.init(&params, dev->getFrequency(), dev->getWidth(), dev->getHeight(), dev->controlledViaHID());
+  _imager.setTempRange(0.0f, 250.0f);
   _imager.setClient(this);
 
   _bufferRaw = new unsigned char[dev->getRawBufferSize()];
