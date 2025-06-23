@@ -8,8 +8,27 @@ namespace optris_drivers2
 
 OptrisImager::OptrisImager(evo::IRDevice* dev, evo::IRDeviceParams params) : Node("optris_imager")
 {
+  RCLCPP_INFO(get_logger(), "Initializing Optris device...");
 
-  RCLCPP_INFO(get_logger(), "Serial: %d", params.serial);
+  // Automatically execute device initialization steps
+  RCLCPP_INFO(get_logger(), "Executing device calibration initialization...");
+  int calibration_result = system("sudo ir_download_calibration > /dev/null 2>&1");
+  if (calibration_result == 0) {
+    RCLCPP_INFO(get_logger(), "Calibration data initialization completed");
+  } else {
+    RCLCPP_WARN(get_logger(), "Calibration data initialization failed, but continuing execution");
+  }
+
+  // Execute device serial number lookup (this may trigger device re-initialization)
+  RCLCPP_INFO(get_logger(), "Finding and initializing device serial number...");
+  int serial_result = system("sudo ir_find_serial > /dev/null 2>&1");
+  if (serial_result == 0) {
+    RCLCPP_INFO(get_logger(), "Device serial number initialization completed");
+  } else {
+    RCLCPP_WARN(get_logger(), "Device serial number initialization failed, but continuing execution");
+  }
+
+  RCLCPP_INFO(get_logger(), "Serial: %ld", params.serial);
 
   _imager.init(&params, dev->getFrequency(), dev->getWidth(), dev->getHeight(), dev->controlledViaHID());
   _imager.setClient(this);
@@ -91,11 +110,38 @@ OptrisImager::OptrisImager(evo::IRDevice* dev, evo::IRDeviceParams params) : Nod
 
 OptrisImager::~OptrisImager()
 {
+  RCLCPP_INFO(get_logger(), "Shutting down OptrisImager...");
+  
+  // 停止線程運行
   _run = false;
-  _th->join();
-  _dev->stopStreaming();
+  
+  // 等待線程結束，設置超時以避免死鎖
+  if(_th && _th->joinable()) {
+    try {
+      _th->join();
+    } catch(const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Thread join exception: %s", e.what());
+    }
+    delete _th;
+    _th = nullptr;
+  }
+  
+  // 停止設備串流
+  if(_dev) {
+    try {
+      _dev->stopStreaming();
+    } catch(const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Device stop streaming exception: %s", e.what());
+    }
+  }
 
-  delete [] _bufferRaw;
+  // 清理緩衝區
+  if(_bufferRaw) {
+    delete [] _bufferRaw;
+    _bufferRaw = nullptr;
+  }
+  
+  RCLCPP_INFO(get_logger(), "OptrisImager shutdown complete");
 }
 
 void OptrisImager::timer_callback()
