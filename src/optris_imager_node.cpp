@@ -78,11 +78,22 @@ int main(int argc, char **argv)
     return -1;
   }
 
-  // Give control to class instance
-  rclcpp::Node::SharedPtr node = std::make_shared<optris_drivers2::OptrisImager>(dev, params);
+  try {
+    // Give control to class instance
+    rclcpp::Node::SharedPtr node = std::make_shared<optris_drivers2::OptrisImager>(dev, params);
 
-  rclcpp::spin(node);
-  rclcpp::shutdown();
+    rclcpp::spin(node);
+    rclcpp::shutdown();
+    
+    // Reset the node to trigger the destructor
+    node.reset();
+  }
+  catch(const std::exception& e) {
+    std::cerr << "Exception caught: " << e.what() << std::endl;
+  }
+
+  // Ensure device is properly destroyed
+  delete dev;
 
   return 0;
 }

@@ -118,15 +118,15 @@ private:
 
   bool _run;
 
-  std::thread* _th;
+  std::thread* _th = nullptr;
 
   evo::IRImager _imager;
 
-  evo::IRDevice* _dev;
+  evo::IRDevice* _dev = nullptr;
 
   unsigned int _img_cnt;
 
-  unsigned char* _bufferRaw;
+  unsigned char* _bufferRaw = nullptr;
 
   sensor_msgs::msg::Image _thermal_image;
 

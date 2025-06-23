@@ -32,8 +32,8 @@ namespace optris_drivers2
     _bufferVisible = nullptr;
     _frame         = 0;
     int palette    = 6;
-    double tMin    = 20.0;
-    double tMax    = 40.0;
+    double tMin    = 0.0;
+    double tMax    = 250.0;
 
     evo::EnumOptrisPaletteScalingMethod scalingMethod = evo::eMinMax;
 
