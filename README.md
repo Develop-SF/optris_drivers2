@@ -72,3 +72,23 @@ If you want to install the latest available version using rosdep, add a rosdep s
 ``sudo sh -c 'echo "yaml https://raw.githubusercontent.com/evocortex/optris_drivers2/master/libirimager.yaml " > /etc/ros/rosdep/sources.list.d/19-libirimager.list'``
 
 in a Linux terminal. For further information regarding rosdep, see http://wiki.ros.org/rosdep
+
+The IR SDK and configuration files should be installed on the host machine, then pass the configuration file to the container if needed.
+
+Download the IR Imager:
+```
+$ sudo apt install libudev-dev -y
+$ wget https://github.com/Optris/irdirectsdk_downloads/releases/download/v8.9.3/libirimager-8.9.3-ubuntu-22.04-amd64.deb
+```
+
+Plug in the camera and install the IR Imager:
+```
+$ sudo dpkg -i libirimager-8.9.3-ubuntu-22.04-amd64.deb
+```
+
+Run the command to finish the initial setup:
+```
+$ sudo ir_download_calibration && sudo ir_find_serial && sudo ir_generate_configuration > ~/xi80.xml
+```
+
+The `xi80.xml` contains the serial number of the camera so this can only work for the camera that is plugged in.
