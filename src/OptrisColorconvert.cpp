@@ -134,6 +134,8 @@ namespace optris_drivers2
     float scaleY = scaled_image_height / static_cast<float>(thermalImage.rows);
 
     
+    // ============ CLUSTERING CODE COMMENTED OUT ============
+    /*
     // 准备进行k-means聚类的数据
     cv::Mat data_kmeans;
     thermalImage.convertTo(data_kmeans, CV_32F);
@@ -225,6 +227,42 @@ namespace optris_drivers2
                       cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 0), 1);
           }
     }
+    */
+    // ============ END OF COMMENTED CLUSTERING CODE ============
+    
+    // Find maximum temperature pixel by scanning the thermal image
+    cv::Point maxTempPixel;
+    float maxTemp = -1000.0f; // Initialize with very low temperature
+    
+    for (int y = 0; y < image->height; ++y) {
+        for (int x = 0; x < image->width; ++x) {
+            float temp = _iBuilder.getTemperatureAt(x, y);
+            if (temp > maxTemp) {
+                maxTemp = temp;
+                maxTempPixel = cv::Point(x, y);
+            }
+        }
+    }
+    
+    // Scale the coordinates to the resized image
+    cv::Point2f maxTempPoint(maxTempPixel.x * scaleX, maxTempPixel.y * scaleY);
+    
+    // Draw a thin white cross at the maximum temperature point
+    int cross_length = 8; // length of each arm of the cross
+    int thickness = 1;
+    cv::line(resizedImage, 
+             cv::Point(maxTempPoint.x - cross_length, maxTempPoint.y), 
+             cv::Point(maxTempPoint.x + cross_length, maxTempPoint.y), 
+             cv::Scalar(255, 0, 0), thickness);
+    cv::line(resizedImage, 
+             cv::Point(maxTempPoint.x, maxTempPoint.y - cross_length), 
+             cv::Point(maxTempPoint.x, maxTempPoint.y + cross_length), 
+             cv::Scalar(255, 0, 0), thickness);
+    
+    // Display temperature text
+    std::string maxTempText = "Max: " + std::to_string(static_cast<int>(maxTemp)) + " C";
+    cv::putText(resizedImage, maxTempText, cv::Point(maxTempPoint.x + 15, maxTempPoint.y - 10),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
     
     // 將修改後的圖像 data 回寫到_bufferThermal
     if(_resizedBufferThermal==NULL)
@@ -250,9 +288,9 @@ namespace optris_drivers2
     
     optris_drivers2::msg::Temperature foodTemperature;
     foodTemperature.header.stamp = this->now();
-    foodTemperature.temperature_flag = temperatures[midTempIndex];
-    foodTemperature.temperature_box = temperatures[midTempIndex];
-    foodTemperature.temperature_chip = temperatures[midTempIndex];
+    foodTemperature.temperature_flag = maxTemp;
+    foodTemperature.temperature_box = maxTemp;
+    foodTemperature.temperature_chip = maxTemp;
     _pubTemp->publish(foodTemperature);
   }
 
