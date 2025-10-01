@@ -36,64 +36,21 @@
  * Author: Stefan May
  *********************************************************************/
 
-#include <sys/stat.h>
 #include "OptrisImager.h"
 
 int main(int argc, char **argv)
 {
   rclcpp::init(argc, argv);
-
-  if(argc!=2)
-  {
-    std::cerr << "usage: ros2  run optris_drivers2 optris_imager_node <xmlConfig>" << std::endl;
-    return -1;
-  }
-
-  std::string xmlConfig = argv[1];
-
-  // A specific configuration file for each imager device is needed (cf. config directory)
-  struct stat s;
-  if(stat(xmlConfig.c_str(), &s) != 0)
-  {
-    std::cerr << "usage: ros2  run optris_drivers2 " << argv[0] << " <xmlConfig>" << std::endl;
-    std::cerr << " verify that <xmlConfig> exists" << std::endl;
-    return -1;
-  }
-  else
-  {
-    std::cout << "Found configuration file " << argv[1] << std::endl;
-  }
   
-
-  // Read parameters from xml file
-  evo::IRDeviceParams params;
-  if(!evo::IRDeviceParamsReader::readXML(xmlConfig.c_str(), params))
-    return -1;
-
-  // Find valid device
-  evo::IRDevice* dev = evo::IRDevice::IRCreateDevice(params);
-  if(!dev)
-  {
-    std::cout << "Error: UVC device with serial " << params.serial << " could not be found" << std::endl;
-    return -1;
-  }
-
   try {
-    // Give control to class instance
-    rclcpp::Node::SharedPtr node = std::make_shared<optris_drivers2::OptrisImager>(dev, params);
-
-    rclcpp::spin(node);
-    rclcpp::shutdown();
-    
-    // Reset the node to trigger the destructor
-    node.reset();
+    rclcpp::spin(std::make_shared<optris_drivers2::OptrisImager>());
   }
   catch(const std::exception& e) {
-    std::cerr << "Exception caught: " << e.what() << std::endl;
+    RCLCPP_FATAL(rclcpp::get_logger("optris_imager"), "Failed to initialize: %s", e.what());
+    rclcpp::shutdown();
+    return -1;
   }
-
-  // Ensure device is properly destroyed
-  delete dev;
-
+  
+  rclcpp::shutdown();
   return 0;
 }

@@ -1,13 +1,55 @@
 #include "OptrisImager.h"
 
-
+#include <sys/stat.h>
 #include <chrono>
+#include <stdexcept>
 
 namespace optris_drivers2
 {
 
-OptrisImager::OptrisImager(evo::IRDevice* dev, evo::IRDeviceParams params) : Node("optris_imager")
+OptrisImager::OptrisImager() : Node("optris_imager")
 {
+  RCLCPP_INFO(get_logger(), "Initializing Optris Imager Node...");
+
+  // Declare and get the XML config file parameter
+  this->declare_parameter<std::string>("xml_config_file", "");
+  std::string xmlConfig = this->get_parameter("xml_config_file").as_string();
+  
+  if(xmlConfig.empty())
+  {
+    RCLCPP_FATAL(get_logger(), "xml_config_file parameter is required but not set");
+    throw std::runtime_error("xml_config_file parameter missing");
+  }
+
+  // Verify XML config file exists
+  struct stat s;
+  if(stat(xmlConfig.c_str(), &s) != 0)
+  {
+    RCLCPP_FATAL(get_logger(), "XML config file does not exist: %s", xmlConfig.c_str());
+    throw std::runtime_error("XML config file not found: " + xmlConfig);
+  }
+  
+  RCLCPP_INFO(get_logger(), "Using configuration file: %s", xmlConfig.c_str());
+
+  // Read parameters from xml file
+  evo::IRDeviceParams params;
+  if(!evo::IRDeviceParamsReader::readXML(xmlConfig.c_str(), params))
+  {
+    RCLCPP_FATAL(get_logger(), "Failed to read XML configuration");
+    throw std::runtime_error("Failed to read XML configuration");
+  }
+
+  // Find valid device
+  evo::IRDevice* dev = evo::IRDevice::IRCreateDevice(params);
+  if(!dev)
+  {
+    RCLCPP_FATAL(get_logger(), "UVC device with serial %ld could not be found", params.serial);
+    throw std::runtime_error("Could not create IR device");
+  }
+
+  // Store device pointer for cleanup
+  _dev = dev;
+
   RCLCPP_INFO(get_logger(), "Initializing Optris device...");
 
   // Automatically execute device initialization steps
