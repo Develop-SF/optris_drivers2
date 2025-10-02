@@ -214,7 +214,7 @@ void OptrisImager::onThermalFrame(unsigned short* image, unsigned int w, unsigne
   memcpy(&_thermal_image.data[0], image, w * h * sizeof(*image));
 
   _thermal_image.header.frame_id = "";
-  _thermal_image.header.stamp = rclcpp::Node::now();
+  _thermal_image.header.stamp = rclcpp::Node::now() - rclcpp::Duration::from_seconds(0.05);
   _thermal_pub->publish(_thermal_image);
 
   _device_timer.header.frame_id=_thermal_image.header.frame_id;
