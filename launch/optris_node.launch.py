@@ -14,13 +14,18 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 def launch_setup(context, *args, **kwargs):
     """Launch setup for RGBT with multiple cameras and thermal imaging"""
     nodes = []
-
+    optris_calib_path = os.path.join(
+        get_package_share_directory("optris_drivers2"),
+        "config/"
+    )
     # OptrisXi thermal camera - imager node
     optris_imager_node = Node(
         package='optris_drivers2',
         executable='optris_imager_node',
         name='optris_imager',
-        arguments=['/root/ws_sns/src/sns_drivers/optris_drivers2/xi80.xml'],
+        parameters=[{
+            'xml_config_file': optris_calib_path + 'xi80_2.xml',
+        }],
         output='screen'
     )
     nodes.append(optris_imager_node)
