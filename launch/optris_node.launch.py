@@ -21,13 +21,16 @@ def launch_setup(context, *args, **kwargs):
     # Build namespace argument if provided
     namespace_arg = f'--ros-args -r __ns:={namespace}' if namespace and namespace != '' else ''
     
+    # Get config template argument
+    config_template = LaunchConfiguration('config_template').perform(context)
+    
     # Get path to supervisor script
     optris_pkg_dir = get_package_share_directory('optris_drivers2')
     supervisor_script = os.path.join(optris_pkg_dir, 'scripts', 'optris_supervisor.sh')
     
     # Launch the supervisor script
     supervisor_process = ExecuteProcess(
-        cmd=['bash', supervisor_script, xml_config_file, namespace_arg],
+        cmd=['bash', supervisor_script, xml_config_file, namespace_arg, config_template],
         name='optris_supervisor',
         output='screen',
         shell=False,
@@ -46,6 +49,11 @@ def generate_launch_description():
             'namespace',
             default_value='',
             description='Namespace for the Optris nodes'
+        ),
+        DeclareLaunchArgument(
+            'config_template',
+            default_value='',
+            description='Path to existing XML config file to use as a template'
         ),
     ]
 

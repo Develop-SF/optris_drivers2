@@ -7,6 +7,7 @@ set -e
 # Parse arguments
 XML_CONFIG_FILE="$1"
 NAMESPACE_ARG="$2"
+TEMPLATE_FILE="$3"
 
 # Cleanup function for graceful shutdown
 cleanup() {
@@ -74,7 +75,7 @@ else
 fi
 
 # Step 3: Generate configuration
-echo "Step 3: Generating configuration file..."
+echo "Step 3: Generating/Updating configuration file..."
 rm -f "$XML_CONFIG_FILE"
 
 if ! sudo ir_find_serial; then
@@ -82,14 +83,34 @@ if ! sudo ir_find_serial; then
     exit 1
 fi
 
-if ! sudo ir_generate_configuration > "$XML_CONFIG_FILE"; then
-    echo "ERROR: ir_generate_configuration failed"
-    exit 1
+# Need to capture the actual serial number detected by finding 1st value from ir_find_serial output?
+# ir_find_serial usually just prints valid serials. We'll grab the first one.
+DETECTED_SERIAL=$(sudo ir_find_serial | grep -oE '[0-9]+' | head -n1)
+echo "Detected Serial: $DETECTED_SERIAL"
+
+if [ -n "$TEMPLATE_FILE" ] && [ -f "$TEMPLATE_FILE" ]; then
+    echo "Using template: $TEMPLATE_FILE"
+    cp "$TEMPLATE_FILE" "$XML_CONFIG_FILE"
+    
+    # Update the Serial Number in the template to match the connected camera
+    # This prevents using the hardcoded serial from the template
+    if [ -n "$DETECTED_SERIAL" ]; then
+        sed -i "s|<serial>.*</serial>|<serial>$DETECTED_SERIAL</serial>|g" "$XML_CONFIG_FILE"
+    else
+        echo "WARNING: Could not detect serial number to update template!"
+    fi
+else
+    # Fallback to auto-generation
+    echo "No valid template provided, auto-generating configuration..."
+    if ! sudo ir_generate_configuration > "$XML_CONFIG_FILE"; then
+        echo "ERROR: ir_generate_configuration failed"
+        exit 1
+    fi
 fi
 
-# Fix framerate bug
+# Fix framerate bug (ensure it's not inf)
 sed -i 's/<framerate>inf<\/framerate>/<framerate>32.0<\/framerate>/g' "$XML_CONFIG_FILE"
-echo "Configuration generated at: $XML_CONFIG_FILE"
+echo "Configuration ready at: $XML_CONFIG_FILE"
 
 # Step 4: Launch imager node in background
 echo "Step 4: Starting optris_imager_node..."
