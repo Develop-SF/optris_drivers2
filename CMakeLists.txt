@@ -56,11 +56,12 @@ ament_export_dependencies(rosidl_default_runtime)
 
 add_executable(optris_imager_node src/optris_imager_node.cpp src/OptrisImager.cpp)
 ament_target_dependencies(optris_imager_node rclcpp std_msgs std_srvs sensor_msgs image_transport camera_info_manager)
-rosidl_target_interfaces(optris_imager_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(optris_imager_node "${cpp_typesupport_target}")
 
 add_executable(optris_colorconvert_node src/optris_colorconvert_node.cpp src/OptrisColorconvert.cpp)
 ament_target_dependencies(optris_colorconvert_node rclcpp std_msgs std_srvs sensor_msgs image_transport camera_info_manager)
-rosidl_target_interfaces(optris_colorconvert_node ${PROJECT_NAME} "rosidl_typesupport_cpp")
+target_link_libraries(optris_colorconvert_node "${cpp_typesupport_target}")
 
 target_link_libraries(optris_imager_node 
   irimager
@@ -90,5 +91,8 @@ install(TARGETS
 
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
 install(DIRECTORY config DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY scripts DESTINATION share/${PROJECT_NAME}
+  USE_SOURCE_PERMISSIONS
+)
 
 ament_package()

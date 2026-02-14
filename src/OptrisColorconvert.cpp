@@ -230,9 +230,11 @@ namespace optris_drivers2
     */
     // ============ END OF COMMENTED CLUSTERING CODE ============
     
-    // Find maximum temperature pixel by scanning the thermal image
+    // Find maximum and minimum temperature pixels by scanning the thermal image
     cv::Point maxTempPixel;
+    cv::Point minTempPixel;
     float maxTemp = -1000.0f; // Initialize with very low temperature
+    float minTemp = 1000.0f;  // Initialize with very high temperature
     
     for (int y = 0; y < image->height; ++y) {
         for (int x = 0; x < image->width; ++x) {
@@ -241,28 +243,49 @@ namespace optris_drivers2
                 maxTemp = temp;
                 maxTempPixel = cv::Point(x, y);
             }
+            if (temp < minTemp) {
+                minTemp = temp;
+                minTempPixel = cv::Point(x, y);
+            }
         }
     }
     
     // Scale the coordinates to the resized image
     cv::Point2f maxTempPoint(maxTempPixel.x * scaleX, maxTempPixel.y * scaleY);
+    cv::Point2f minTempPoint(minTempPixel.x * scaleX, minTempPixel.y * scaleY);
     
-    // Draw a thin white cross at the maximum temperature point
     int cross_length = 8; // length of each arm of the cross
-    int thickness = 1;
+    int thickness = 2;
+    
+    // Draw a red cross at the maximum temperature point
     cv::line(resizedImage, 
              cv::Point(maxTempPoint.x - cross_length, maxTempPoint.y), 
              cv::Point(maxTempPoint.x + cross_length, maxTempPoint.y), 
-             cv::Scalar(255, 0, 0), thickness);
+             cv::Scalar(0, 0, 255), thickness);
     cv::line(resizedImage, 
              cv::Point(maxTempPoint.x, maxTempPoint.y - cross_length), 
              cv::Point(maxTempPoint.x, maxTempPoint.y + cross_length), 
-             cv::Scalar(255, 0, 0), thickness);
+             cv::Scalar(0, 0, 255), thickness);
     
-    // Display temperature text
+    // Display maximum temperature text
     std::string maxTempText = "Max: " + std::to_string(static_cast<int>(maxTemp)) + " C";
     cv::putText(resizedImage, maxTempText, cv::Point(maxTempPoint.x + 15, maxTempPoint.y - 10),
-                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 1);
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(0, 0, 255), 2);
+    
+    // Draw a blue cross at the minimum temperature point
+    cv::line(resizedImage, 
+             cv::Point(minTempPoint.x - cross_length, minTempPoint.y), 
+             cv::Point(minTempPoint.x + cross_length, minTempPoint.y), 
+             cv::Scalar(255, 0, 0), thickness);
+    cv::line(resizedImage, 
+             cv::Point(minTempPoint.x, minTempPoint.y - cross_length), 
+             cv::Point(minTempPoint.x, minTempPoint.y + cross_length), 
+             cv::Scalar(255, 0, 0), thickness);
+    
+    // Display minimum temperature text
+    std::string minTempText = "Min: " + std::to_string(static_cast<int>(minTemp)) + " C";
+    cv::putText(resizedImage, minTempText, cv::Point(minTempPoint.x + 15, minTempPoint.y + 20),
+                cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 0, 0), 2);
     
     // 將修改後的圖像 data 回寫到_bufferThermal
     if(_resizedBufferThermal==NULL)

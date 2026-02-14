@@ -3,46 +3,59 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, OpaqueFunction
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
-from launch.conditions import IfCondition
-from launch.launch_description_sources import PythonLaunchDescriptionSource
-
 
 
 def launch_setup(context, *args, **kwargs):
-    """Launch setup for RGBT with multiple cameras and thermal imaging"""
-    nodes = []
-    optris_calib_path = os.path.join(
-        get_package_share_directory("optris_drivers2"),
-        "config/"
+    """Launch setup for Optris thermal camera with supervisor script"""
+    
+    # Get launch arguments
+    xml_config_file = LaunchConfiguration('xml_config_file').perform(context)
+    namespace = LaunchConfiguration('namespace').perform(context)
+    
+    # If no config file specified, use auto-generated path
+    if not xml_config_file or xml_config_file == '':
+        xml_config_file = '/tmp/optris_auto.xml'
+    
+    # Build namespace argument if provided
+    namespace_arg = f'--ros-args -r __ns:={namespace}' if namespace and namespace != '' else ''
+    
+    # Get config template argument
+    config_template = LaunchConfiguration('config_template').perform(context)
+    
+    # Get path to supervisor script
+    optris_pkg_dir = get_package_share_directory('optris_drivers2')
+    supervisor_script = os.path.join(optris_pkg_dir, 'scripts', 'optris_supervisor.sh')
+    
+    # Launch the supervisor script
+    supervisor_process = ExecuteProcess(
+        cmd=['bash', supervisor_script, xml_config_file, namespace_arg, config_template],
+        name='optris_supervisor',
+        output='screen',
+        shell=False,
     )
-    # OptrisXi thermal camera - imager node
-    optris_imager_node = Node(
-        package='optris_drivers2',
-        executable='optris_imager_node',
-        name='optris_imager',
-        parameters=[{
-            'xml_config_file': optris_calib_path + 'xi80_2.xml',
-        }],
-        output='screen'
-    )
-    nodes.append(optris_imager_node)
-
-    # OptrisXi thermal camera - color convert node
-    optris_colorconvert_node = Node(
-        package='optris_drivers2',
-        executable='optris_colorconvert_node',
-        name='optris_colorconvert',
-        output='screen'
-    )
-    nodes.append(optris_colorconvert_node)
-
-    return nodes
+    
+    return [supervisor_process]
 
 def generate_launch_description():
-    declared_arguments = []
+    declared_arguments = [
+        DeclareLaunchArgument(
+            'xml_config_file',
+            default_value='',
+            description='Path to Optris XML configuration file (will be auto-generated if empty)'
+        ),
+        DeclareLaunchArgument(
+            'namespace',
+            default_value='',
+            description='Namespace for the Optris nodes'
+        ),
+        DeclareLaunchArgument(
+            'config_template',
+            default_value='',
+            description='Path to existing XML config file to use as a template'
+        ),
+    ]
 
     return LaunchDescription(
         declared_arguments + [OpaqueFunction(function=launch_setup)]
