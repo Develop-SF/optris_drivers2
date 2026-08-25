@@ -6,6 +6,7 @@
 #include "libirimager/IRImagerClient.h"
 
 #include "rclcpp/rclcpp.hpp"
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <chrono>
 #include <thread>
 #include <image_transport/image_transport.h>
@@ -112,7 +113,21 @@ public:
   void onFocus(const std::shared_ptr<rmw_request_id_t> request_header,
                              const std::shared_ptr<optris_drivers2::srv::FocusMotorPos::Request> req,
                              const std::shared_ptr<optris_drivers2::srv::FocusMotorPos::Response> res);
+
+  /**
+   * Push emissivity / transmissivity / ambient temperature into the SDK
+   * (IRImager::setRadiationParameters). tAmbient < -273.15 => camera-measured.
+   */
+  void applyRadiationParameters(double emissivity, double transmissivity, double tAmbient);
+
+  /**
+   * Parameter-set callback: validates and live-applies the radiation parameters.
+   */
+  rcl_interfaces::msg::SetParametersResult onParametersSet(const std::vector<rclcpp::Parameter>& params);
+
 private:
+
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr _param_cb;
 
   bool _run;
 

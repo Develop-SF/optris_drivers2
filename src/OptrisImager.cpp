@@ -73,7 +73,44 @@ OptrisImager::OptrisImager() : Node("optris_imager")
   RCLCPP_INFO(get_logger(), "Serial: %ld", params.serial);
 
   _imager.init(&params, dev->getFrequency(), dev->getWidth(), dev->getHeight(), dev->controlledViaHID());
-  _imager.setTempRange(0.0f, 250.0f);
+
+  // Calibrated temperature range to start in. Must be one of the ranges in the
+  // camera's calibration file (Xi80: -20..100, 0..250, 150..900); can still be
+  // switched at runtime through the temperature_range service.
+  this->declare_parameter<int>("temperature_range_min", 0);
+  this->declare_parameter<int>("temperature_range_max", 250);
+  int tRangeMin = this->get_parameter("temperature_range_min").as_int();
+  int tRangeMax = this->get_parameter("temperature_range_max").as_int();
+  if(_imager.setTempRange(tRangeMin, tRangeMax))
+  {
+    RCLCPP_INFO(get_logger(), "Temperature range: %d..%d C", tRangeMin, tRangeMax);
+  }
+  else
+  {
+    RCLCPP_WARN(get_logger(), "Temperature range %d..%d C is not calibrated for this camera, falling back to 0..250 C", tRangeMin, tRangeMax);
+    _imager.setTempRange(0, 250);
+  }
+
+  // Radiometric correction (IRImager::setRadiationParameters). Defaults keep
+  // the SDK behaviour: emissivity 1.0, transmissivity 1.0, ambient measured by
+  // the camera. Set emissivity to the observed object's value (e.g. ~0.9 for
+  // an oxidised steel wok) for correct absolute temperatures. Live-tunable:
+  //   ros2 param set <ns>/optris_imager emissivity 0.9
+  this->declare_parameter<double>("emissivity", 1.0);
+  this->declare_parameter<double>("transmissivity", 1.0);
+  this->declare_parameter<double>("ambient_temperature", -999.0);
+  applyRadiationParameters(this->get_parameter("emissivity").as_double(),
+                           this->get_parameter("transmissivity").as_double(),
+                           this->get_parameter("ambient_temperature").as_double());
+  _param_cb = this->add_on_set_parameters_callback(
+      std::bind(&OptrisImager::onParametersSet, this, std::placeholders::_1));
+
+  float focusPos = _imager.getFocusmotorPos();
+  if(focusPos < 0.f)
+    RCLCPP_INFO(get_logger(), "Focus motor: not available");
+  else
+    RCLCPP_INFO(get_logger(), "Focus motor position: %.1f %%", focusPos);
+
   _imager.setClient(this);
 
   _bufferRaw = new unsigned char[dev->getRawBufferSize()];
@@ -289,14 +326,15 @@ void OptrisImager::onSetTemperatureRange(const std::shared_ptr<rmw_request_id_t>
 {
   (void) request_header;
 
-  bool validParam = _imager.setTempRange(req->temperature_range_min, req->temperature_range_max);
-
-  if(validParam)
-  {
-    _imager.forceFlagEvent(1000.f);
-  }
-
-  res->success = validParam;
+  // Route through the parameter interface so the active range is always
+  // observable via `ros2 param get <node> temperature_range_min/max`
+  // (validation + flag cycle happen in onParametersSet).
+  auto result = this->set_parameters_atomically({
+      rclcpp::Parameter("temperature_range_min", (int)req->temperature_range_min),
+      rclcpp::Parameter("temperature_range_max", (int)req->temperature_range_max)});
+  if(!result.successful)
+    RCLCPP_WARN(get_logger(), "temperature_range service rejected: %s", result.reason.c_str());
+  res->success = result.successful;
 }
 
 
@@ -310,8 +348,98 @@ void OptrisImager::onFocus(const std::shared_ptr<rmw_request_id_t> request_heade
     bool error = _imager.setFocusmotorPos(req->pos);
     //if error is false, it means that the focus motor is not available
     res->success = error;
+    if(error)
+      RCLCPP_INFO(get_logger(), "Focus motor position now %.1f %%", _imager.getFocusmotorPos());
+    else
+      RCLCPP_WARN(get_logger(), "Focus motor not available");
 
 
+}
+
+void OptrisImager::applyRadiationParameters(double emissivity, double transmissivity, double tAmbient)
+{
+  _imager.setRadiationParameters((float)emissivity, (float)transmissivity, (float)tAmbient);
+  if(tAmbient < -273.15)
+    RCLCPP_INFO(get_logger(), "Radiation parameters: emissivity=%.3f transmissivity=%.3f ambient=camera-measured", emissivity, transmissivity);
+  else
+    RCLCPP_INFO(get_logger(), "Radiation parameters: emissivity=%.3f transmissivity=%.3f ambient=%.1f C", emissivity, transmissivity, tAmbient);
+}
+
+rcl_interfaces::msg::SetParametersResult OptrisImager::onParametersSet(const std::vector<rclcpp::Parameter>& params)
+{
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+
+  // Start from the committed values, overlay the incoming ones (they are not
+  // stored yet while this callback runs).
+  double e  = this->get_parameter("emissivity").as_double();
+  double t  = this->get_parameter("transmissivity").as_double();
+  double ta = this->get_parameter("ambient_temperature").as_double();
+  int tMin = this->get_parameter("temperature_range_min").as_int();
+  int tMax = this->get_parameter("temperature_range_max").as_int();
+  bool radiation = false;
+  bool range = false;
+  for(const auto& p : params)
+  {
+    const std::string& name = p.get_name();
+    if(name == "temperature_range_min" || name == "temperature_range_max")
+    {
+      if(p.get_type() != rclcpp::ParameterType::PARAMETER_INTEGER)
+      {
+        result.successful = false;
+        result.reason = name + " must be an integer (C)";
+        return result;
+      }
+      (name == "temperature_range_min" ? tMin : tMax) = (int)p.as_int();
+      range = true;
+      continue;
+    }
+    if(name == "emissivity" || name == "transmissivity")
+    {
+      if(p.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE)
+      {
+        result.successful = false;
+        result.reason = name + " must be a double (e.g. 0.9)";
+        return result;
+      }
+      double v = p.as_double();
+      if(v <= 0.0 || v > 1.0)
+      {
+        result.successful = false;
+        result.reason = name + " must be in (0, 1]";
+        return result;
+      }
+      (name == "emissivity" ? e : t) = v;
+      radiation = true;
+    }
+    else if(name == "ambient_temperature")
+    {
+      if(p.get_type() != rclcpp::ParameterType::PARAMETER_DOUBLE)
+      {
+        result.successful = false;
+        result.reason = "ambient_temperature must be a double (C); < -273.15 = camera-measured";
+        return result;
+      }
+      ta = p.as_double();
+      radiation = true;
+    }
+  }
+  if(range)
+  {
+    // Only ranges present in the camera's calibration file are accepted.
+    if(!_imager.setTempRange(tMin, tMax))
+    {
+      result.successful = false;
+      result.reason = "temperature range " + std::to_string(tMin) + ".." + std::to_string(tMax) +
+                      " C is not calibrated for this camera (Xi80: -20..100, 0..250, 150..900)";
+      return result;
+    }
+    _imager.forceFlagEvent(1000.f);
+    RCLCPP_INFO(get_logger(), "Temperature range switched to %d..%d C (flag cycle in 1 s)", tMin, tMax);
+  }
+  if(radiation)
+    applyRadiationParameters(e, t, ta);
+  return result;
 }
 
 }
