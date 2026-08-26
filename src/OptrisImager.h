@@ -31,11 +31,9 @@ class OptrisImager : public rclcpp::Node, public evo::IRImagerClient
 public:
 
   /**
-   * Constructor
-   * @param[in] dev UVC device instance
-   * @param[in] params device parameters
+   * Constructor - reads parameters and initializes device
    */
-  OptrisImager(evo::IRDevice* dev, evo::IRDeviceParams params);
+  OptrisImager();
 
   /**
    * Destructor

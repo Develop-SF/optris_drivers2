@@ -77,7 +77,7 @@ The IR SDK and configuration files should be installed on the host machine, then
 
 Download the IR Imager:
 ```
-$ sudo apt install libudev-dev -y
+$ sudo apt update && sudo apt install libudev-dev -y
 $ wget https://github.com/Optris/irdirectsdk_downloads/releases/download/v8.9.3/libirimager-8.9.3-ubuntu-22.04-amd64.deb
 ```
 
