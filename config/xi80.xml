@@ -14,15 +14,20 @@
        optics_text: If the camera is calibrated for multiple optics with the same field of view, the additional name of the optic need to be set here.
        temperature: This value specify the selection of the calibration temperature range. 
                     Only predefined temperature ranges are valid which can be obtained through the data sheet of your camera or PIX Connect.
+                    Range A(default): -20°C to 100°C
+                    Range B         : 0°C to 250°C
+                    Range C         : 150°C to 900°C
   -->
   <!--
   <fov>30</fov>
-  <temperature>
-    <min>-20</min>
-    <max>100</max>
-  </temperature>
   <optics_text></optics_text>
   -->
+  
+  <temperature>
+    <min>0</min>
+    <max>250</max>
+  </temperature>
+
   <framerate>32.0</framerate>             <!-- only scaled down frame rate, maximum framerate depends on the chosen <videoformatindex> -->
   <bispectral>0</bispectral>              <!-- 0=only thermal sensor, 1=bispectral technology (only PI200/PI230) -->
   <autoflag>
